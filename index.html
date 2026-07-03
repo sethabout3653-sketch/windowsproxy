@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Windows-Inspired OS & Proxy</title>
+  <style>
+    :root{
+      --text:#fff;
+      --accent:#22b8ff;
+      --accent2:#4aa3ff;
+      --shadow: 0 20px 60px rgba(0,0,0,.45);
+      --transition: 650ms;
+      --bootDuration: 7000ms;
+      --welcomeDuration: 2400ms;
+      --desktopFade: 1000ms;
+      --wallpaper: radial-gradient(circle at 15% 15%, rgba(120,190,255,.34), transparent 22%),
+                    radial-gradient(circle at 85% 24%, rgba(43,130,255,.28), transparent 24%),
+                    radial-gradient(circle at 50% 70%, rgba(67,164,255,.2), transparent 28%),
+                    linear-gradient(135deg, #253746, #0e1b24 40%, #101926 62%, #172635 100%);
+    }
+
+    *{ box-sizing:border-box; }
+    html,body{ width:100%; height:100%; margin:0; overflow:hidden; font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif; background:#000; }
+    body{ color:var(--text); }
+
+    .screen{
+      position:fixed; inset:0;
+      opacity:0; pointer-events:none;
+      transition: opacity var(--transition) ease, transform var(--transition) ease, filter var(--transition) ease;
+    }
+    .screen.active{ opacity:1; pointer-events:auto; }
+
+    /* BOOT */
+    #boot{
+      background:#000;
+      display:flex; align-items:center; justify-content:center; flex-direction:column;
+      z-index:50;
+    }
+    .boot-logo{
+      width:min(170px, 22vw);
+      height:auto;
+      filter: drop-shadow(0 0 14px rgba(34,184,255,.22));
+      transform: translateY(-30px);
+      user-select:none;
+      -webkit-user-drag:none;
+    }
+    .spinner{
+      width:30px; height:30px;
+      border-radius:50%;
+      border: 3px solid rgba(255,255,255,.18);
+      border-top-color: rgba(255,255,255,.94);
+      border-right-color: rgba(255,255,255,.55);
+      animation: spin 0.85s linear infinite;
+      margin-top:38px;
+      filter: drop-shadow(0 0 8px rgba(255,255,255,.15));
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .boot.fade-out{ opacity:0; transform: scale(1.01); }
+
+    /* LOCK */
+    #lock{
+      z-index:30;
+      background: var(--wallpaper);
+      background-size: cover;
+      background-position:center;
+      overflow:hidden;
+    }
+    .lock-blur-layer{
+      position:absolute; inset:-40px;
+      background: inherit;
+      background-size:cover; background-position:center;
+      filter: blur(0px);
+      transform: scale(1);
+      transition: filter 700ms ease, transform 700ms ease;
+    }
+    .lock-blur-layer.blurred{
+      filter: blur(18px) brightness(.76);
+      transform: scale(1.06);
+    }
+    .lock-overlay{
+      position:absolute; inset:0;
+      background: linear-gradient(180deg, rgba(0,0,0,.15), rgba(0,0,0,.18));
+    }
+    .time-wrap{
+      position:absolute; left:0; right:0; top:72px;
+      text-align:center;
+      text-shadow: 0 2px 18px rgba(0,0,0,.45);
+      user-select:none;
+    }
+    .time{ font-size: clamp(64px, 10vw, 104px); font-weight:300; letter-spacing:-2px; line-height:1; }
+    .date{ margin-top:10px; font-size: clamp(18px, 2vw, 24px); font-weight:300; opacity:.95; }
+
+    .lock-center{
+      position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+      flex-direction:column; gap:10px;
+      transition: opacity 400ms ease, transform 400ms ease;
+    }
+    .avatar{
+      width:118px; height:118px; border-radius:50%;
+      background: rgba(238,238,238,.88);
+      display:grid; place-items:center;
+      box-shadow: var(--shadow);
+      overflow:hidden;
+      cursor:pointer;
+      border:1px solid rgba(255,255,255,.12);
+      backdrop-filter: blur(18px) saturate(140%);
+    }
+    .avatar img{ width:100%; height:100%; object-fit:cover; display:none; }
+    .avatar .person-icon{ width:64px; height:64px; opacity:.75; }
+    .username{ font-size: 28px; font-weight: 300; text-shadow:0 2px 18px rgba(0,0,0,.5); }
+    .unlock-hint{ margin-top:14px; font-size:14px; opacity:.75; }
+    .bottom-icons{
+      position:absolute; right:18px; bottom:16px; display:flex; gap:18px; opacity:.9; align-items:center;
+    }
+    .icon-btn{
+      width:26px; height:26px; display:grid; place-items:center; cursor:pointer;
+      filter: drop-shadow(0 2px 10px rgba(0,0,0,.35)); user-select:none;
+    }
+    .icon-btn svg{ width:22px; height:22px; fill:#fff; }
+
+    /* PANELS */
+    .panel{
+      position:absolute; left:50%; top:50%;
+      transform: translate(-50%,-45%) scale(.94);
+      width:min(430px, calc(100vw - 32px));
+      border-radius: 10px;
+      background: rgba(16, 25, 35, .32);
+      border: 1px solid rgba(255,255,255,.16);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(22px) saturate(140%);
+      padding: 28px 28px 24px;
+      opacity:0; pointer-events:none;
+      transition: opacity 420ms ease, transform 420ms ease;
+      z-index: 35;
+    }
+    .panel.show{ opacity:1; pointer-events:auto; transform: translate(-50%,-50%) scale(1); }
+    .panel h2{ margin:0 0 8px; font-weight:400; font-size:24px; }
+    .panel p{ margin:0 0 18px; opacity:.9; font-size:14px; line-height:1.45; }
+    .profile-row{ display:flex; align-items:center; gap:14px; margin-bottom:16px; }
+    .pfp-wrap{
+      width:84px; height:84px; border-radius:50%; overflow:hidden; flex:none;
+      background: rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.14);
+      display:grid; place-items:center; cursor:pointer; position:relative;
+    }
+    .pfp-wrap img{ width:100%; height:100%; object-fit:cover; display:none; }
+    .pfp-wrap .person-icon{ width:44px; height:44px; opacity:.8; }
+    .pfp-actions{ font-size:12px; opacity:.85; }
+    .pfp-actions button{
+      margin-top:8px; background: rgba(255,255,255,.1); color:#fff;
+      border:1px solid rgba(255,255,255,.16); border-radius:8px; padding:8px 10px; cursor:pointer;
+    }
+    .field{ margin-top:12px; }
+    .field label{ display:block; font-size:12px; opacity:.9; margin:0 0 7px; }
+    .field input{
+      width:100%; height:42px; border-radius:8px; outline:none;
+      border:1px solid rgba(255,255,255,.16);
+      background: rgba(255,255,255,.88); color:#111; padding:0 14px; font-size:14px;
+    }
+    .field input::placeholder{ color:#666; }
+    .actions{ display:flex; justify-content:flex-end; gap:10px; margin-top:18px; }
+    .btn{
+      border:none; border-radius:8px; padding:10px 16px; font-size:14px; cursor:pointer;
+      color:#fff; background: rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.15);
+    }
+    .btn.primary{ background: linear-gradient(135deg, var(--accent2), #1f7cff); border:none; }
+    .tiny{ margin-top:10px; font-size:12px; opacity:.8; min-height:16px; }
+
+    /* WELCOME */
+    #welcome{
+      z-index:40; background: transparent; display:grid; place-items:center;
+      opacity:0; pointer-events:none;
+    }
+    .welcome-text{
+      font-size: clamp(28px, 4vw, 54px);
+      font-weight:300; letter-spacing:-1px;
+      text-shadow:0 4px 20px rgba(0,0,0,.35);
+      transform: translateY(8px);
+    }
+
+    /* DESKTOP */
+    #desktop{
+      z-index:10; background: var(--wallpaper); background-size: cover; background-position:center;
+      opacity:0; transform: scale(1.02);
+      transition: opacity var(--desktopFade) ease, transform var(--desktopFade) ease;
+    }
+    #desktop.show{ opacity:1; transform: scale(1); }
+    .desktop-dim{ position:absolute; inset:0; background: linear-gradient(180deg, rgba(0,0,0,.16), rgba(0,0,0,.09)); }
+    .taskbar{
+      position:absolute; left:0; right:0; bottom:0; height:48px;
+      background: rgba(20,20,20,.55);
+      backdrop-filter: blur(18px) saturate(140%);
+      display:flex; align-items:center; justify-content:center;
+      border-top:1px solid rgba(255,255,255,.08);
+      z-index: 12;
+    }
+    .start-pill{
+      width:140px; height:34px; border-radius:999px;
+      background: rgba(255,255,255,.08);
+      border:1px solid rgba(255,255,255,.12);
+      display:flex; align-items:center; justify-content:center;
+      gap:10px; font-size:13px; opacity:.95;
+      cursor:pointer;
+      user-select:none;
+      transition: transform 120ms ease, background 120ms ease;
+    }
+    .start-pill:active{ transform: scale(.98); background: rgba(255,255,255,.14); }
+    .desktop-card{
+      position:absolute; left:22px; top:22px;
+      padding:18px 20px; border-radius:14px;
+      background: rgba(255,255,255,.1); backdrop-filter: blur(18px);
+      border:1px solid rgba(255,255,255,.14);
+      box-shadow: var(--shadow);
+      max-width:min(360px, calc(100vw - 44px));
+    }
+    .desktop-card .big{ font-size:20px; font-weight:400; margin-bottom:6px; }
+    .desktop-card .small{ font-size:13px; opacity:.88; line-height:1.45; }
+
+    /* BROWSER WINDOW COMPONENT */
+    .browser-window {
+      position: absolute; top: 10%; left: 15%; width: 70%; height: 75%;
+      background: rgba(24, 28, 36, 0.85); border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 12px; box-shadow: var(--shadow); backdrop-filter: blur(30px);
+      display: flex; flex-direction: column; overflow: hidden; z-index: 100;
+      opacity: 0; transform: scale(0.95); pointer-events: none;
+      transition: transform 0.3s ease, opacity 0.3s ease;
+    }
+    .browser-window.active { opacity: 1; transform: scale(1); pointer-events: auto; }
+    .browser-header {
+      padding: 10px 16px; background: rgba(0,0,0,0.3); display: flex;
+      align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+    .browser-title { font-size: 13px; opacity: 0.8; font-weight: 400; }
+    .browser-close {
+      cursor: pointer; background: rgba(255,255,255,0.1); border: none;
+      border-radius: 50%; width: 24px; height: 24px; color: #fff; line-height: 24px; text-align: center;
+    }
+    .browser-close:hover { background: #ff4d4d; }
+    .browser-nav {
+      padding: 8px 16px; display: flex; gap: 10px; background: rgba(0,0,0,0.1);
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+    .browser-nav input {
+      flex: 1; padding: 6px 14px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.15);
+      background: rgba(255,255,255,0.9); color: #111; font-size: 13px; outline: none;
+    }
+    .browser-view { flex: 1; width: 100%; height: 100%; border: none; background: #fff; }
+
+    /* START MENU */
+    .start-menu{
+      position:absolute; left:20px; bottom:58px; width:min(360px, calc(100vw - 40px)); height:460px;
+      border-radius:18px; background: rgba(18, 22, 30, .72); border:1px solid rgba(255,255,255,.12);
+      backdrop-filter: blur(24px) saturate(140%); box-shadow: 0 26px 70px rgba(0,0,0,.45);
+      opacity:0; pointer-events:none; transform: translateY(12px) scale(.98);
+      transition: opacity 180ms ease, transform 180ms ease; z-index: 30;
+      overflow:hidden; display:flex; flex-direction:column;
+    }
+    .start-menu.show{ opacity:1; pointer-events:auto; transform: translateY(0) scale(1); }
+    .start-top{ padding:16px 16px 10px; display:flex; align-items:center; gap:12px; border-bottom:1px solid rgba(255,255,255,.08); }
+    .start-search{ flex:1; height:38px; border-radius:999px; border:none; outline:none; padding:0 14px; background: rgba(255,255,255,.14); color:#fff; }
+    .start-search::placeholder{ color: rgba(255,255,255,.72); }
+    .start-user{ padding:14px 16px; display:flex; align-items:center; gap:12px; border-bottom:1px solid rgba(255,255,255,.08); }
+    .start-user-avatar{ width:42px; height:42px; border-radius:50%; background: rgba(255,255,255,.18); overflow:hidden; display:grid; place-items:center; border:1px solid rgba(255,255,255,.12); flex:none; }
+    .start-user-avatar img{ width:100%; height:100%; object-fit:cover; display:none; }
+    .start-user-avatar svg{ width:24px; height:24px; opacity:.8; }
+    .start-grid{ padding:14px 14px 0; display:grid; grid-template-columns: repeat(3, 1fr); gap:10px; }
+    .app-tile{ aspect-ratio: 1 / 1; border-radius:16px; background: rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.10); display:flex; align-items:center; justify-content:center; flex-direction:column; gap:8px; font-size:12px; cursor:pointer; user-select:none; transition: transform 120ms ease, background 120ms ease; }
+    .app-tile:hover{ transform: translateY(-1px); background: rgba(255,255,255,.12); }
+    .app-tile svg{ width:26px; height:26px; fill:#fff; opacity:.95; }
+    .start-footer{ margin-top:auto; padding:12px 14px 14px; display:flex; justify-content:space-between; gap:10px; border-top:1px solid rgba(255,255,255,.08); font-size:12px; opacity:.9; }
+    .start-footer button{ background: rgba(255,255,255,.10); color:#fff; border:1px solid rgba(255,255,255,.12); border-radius:999px; padding:8px 12px; cursor:pointer; }
+
+    .hidden{ display:none !important; }
+    input, button { font-family: inherit; }
+  </style>
+</head>
+<body>
+  <div id="boot" class="screen active">
+    <svg class="boot-logo" viewBox="0 0 96 96" aria-label="Windows logo" role="img">
+      <rect x="2" y="12" width="40" height="30" fill="#28c6ff"></rect>
+      <rect x="44" y="10" width="50" height="32" fill="#28c6ff"></rect>
+      <rect x="2" y="46" width="40" height="30" fill="#28c6ff"></rect>
+      <rect x="44" y="44" width="50" height="32" fill="#28c6ff"></rect>
+    </svg>
+    <div class="spinner" aria-label="Loading"></div>
+  </div>
+
+  <div id="lock" class="screen">
+    <div class="lock-blur-layer" id="lockBlur"></div>
+    <div class="lock-overlay"></div>
+    <div class="time-wrap">
+      <div class="time" id="timeText">12:00</div>
+      <div class="date" id="dateText">Monday, January 1</div>
+    </div>
+
+    <div class="lock-center" id="lockCenter">
+      <div class="avatar" id="lockAvatar" title="Click to continue">
+        <img id="lockAvatarImg" alt="Profile picture" />
+        <svg class="person-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path fill="currentColor" d="M12 12c2.761 0 5-2.239 5-5s-2.239-5-5-5-5 2.239-5 5 2.239 5 5 5Zm0 2c-4.418 0-8 2.239-8 5v1h16v-1c0-2.761-3.582-5-8-5Z"/>
+        </svg>
+      </div>
+      <div class="username" id="lockUser">Martin</div>
+      <div class="unlock-hint">Click to continue</div>
+    </div>
+
+    <div class="bottom-icons">
+      <div class="icon-btn" title="Network">
+        <svg viewBox="0 0 24 24"><path d="M12 18.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm-6.2-3.2 1.4 1.4a8.5 8.5 0 0 1 9.6 0l1.4-1.4a10.5 10.5 0 0 0-12.4 0Zm2.8 2.8 1.4 1.4a4.5 4.5 0 0 1 4.4 0l1.4-1.4a6.5 6.5 0 0 0-7.2 0ZM3 9.3l1.4 1.4a13.5 13.5 0 0 1 15.2 0L21 9.3A15.5 15.5 0 0 0 3 9.3Z"/></svg>
+      </div>
+      <div class="icon-btn" title="Accessibility">
+        <svg viewBox="0 0 24 24"><path d="M12 3a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm7 5h-6l-1 3-1-3H5a1 1 0 0 0 0 2h4l1.5 4.5L8 21h2l2-4 2 4h2l-2.5-6.5L15 10h4a1 1 0 0 0 0-2Z"/></svg>
+      </div>
+      <div class="icon-btn" title="Power">
+        <svg viewBox="0 0 24 24"><path d="M11 2h2v10h-2V2Zm1 20a8 8 0 0 1-5.66-13.66l1.42 1.42A6 6 0 1 0 18 12a5.96 5.96 0 0 0-2.24-4.66l1.42-1.42A8 8 0 0 1 12 22Z"/></svg>
+      </div>
+    </div>
+  </div>
+
+  <div id="signupPanel" class="panel">
+    <h2>Set up your account</h2>
+    <p>Create a local profile to continue.</p>
+    <div class="profile-row">
+      <div class="pfp-wrap" id="signupPfpWrap" title="Choose profile picture">
+        <img id="signupPfpImg" alt="Selected profile picture" />
+        <svg class="person-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path fill="currentColor" d="M12 12c2.761 0 5-2.239 5-5s-2.239-5-5-5-5 2.239-5 5 2.239 5 5 5Zm0 2c-4.418 0-8 2.239-8 5v1h16v-1c0-2.761-3.582-5-8-5Z"/>
+        </svg>
+      </div>
+      <div class="pfp-actions">
+        <div>Profile picture</div>
+        <button id="changePfpBtn" type="button">Choose image</button>
+        <input id="pfpInput" type="file" accept="image/*" class="hidden" />
+      </div>
+    </div>
+    <div class="field"><label>Username</label><input id="signupUser" type="text" placeholder="Enter a username" maxlength="24"></div>
+    <div class="field"><label>Password</label><input id="signupPass" type="password" placeholder="Create a password"></div>
+    <div class="field"><label>Confirm password</label><input id="signupConfirm" type="password" placeholder="Confirm password"></div>
+    <div class="tiny" id="signupMsg"></div>
+    <div class="actions">
+      <button class="btn" id="skipSetupBtn" type="button">Skip</button>
+      <button class="btn primary" id="createAccountBtn" type="button">Create account</button>
+    </div>
+  </div>
+
+  <div id="loginPanel" class="panel">
+    <h2>Welcome back</h2>
+    <p>Sign in to continue.</p>
+    <div class="profile-row">
+      <div class="pfp-wrap" style="cursor:default">
+        <img id="loginPfpImg" alt="Profile picture" />
+        <svg class="person-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path fill="currentColor" d="M12 12c2.761 0 5-2.239 5-5s-2.239-5-5-5-5 2.239-5 5 2.239 5 5 5Zm0 2c-4.418 0-8 2.239-8 5v1h16v-1c0-2.761-3.582-5-8-5Z"/>
+        </svg>
+      </div>
+      <div>
+        <div style="font-size:20px;font-weight:300" id="loginUserTitle">Martin</div>
+        <div style="font-size:12px;opacity:.82">Local account</div>
+      </div>
+    </div>
+    <div class="field"><label>Password</label><input id="loginPass" type="password" placeholder="Password"></div>
+    <div class="tiny" id="loginMsg"></div>
+    <div class="actions">
+      <button class="btn" id="backBtn" type="button">Back</button>
+      <button class="btn primary" id="loginBtn" type="button">Sign in</button>
+    </div>
+  </div>
+
+  <div id="welcome" class="screen">
+    <div class="welcome-text" id="welcomeText">Welcome</div>
+  </div>
+
+  <div id="desktop" class="screen">
+    <div class="desktop-dim"></div>
+    <div class="desktop-card">
+      <div class="big" id="desktopName">Welcome, Martin</div>
+      <div class="small">Open the Browser app icon inside the Start Menu below to test the streaming proxy.</div>
+    </div>
+
+    <div id="browserWindow" class="browser-window">
+      <div class="browser-header">
+        <div class="browser-title">Secure Proxy Browser</div>
+        <button class="browser-close" id="closeBrowserBtn">&times;</button>
+      </div>
+      <div class="browser-nav">
+        <input type="text" id="browserUrlInput" placeholder="Enter full URL (e.g., https://example.com) and hit Enter..." />
+      </div>
+      <iframe class="browser-view" id="browserIframe" src="about:blank"></iframe>
+    </div>
+
+    <div id="startMenu" class="start-menu" aria-hidden="true">
+      <div class="start-top">
+        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path fill="white" d="M3 3h8v8H3V3Zm10 0h8v8h-8V3ZM3 13h8v8H3v-8Zm10 0h8v8h-8v-8Z"/></svg>
+        <input class="start-search" type="text" placeholder="Search" />
+      </div>
+      <div class="start-user">
+        <div class="start-user-avatar">
+          <img id="startMenuAvatarImg" alt="Profile picture" />
+          <svg class="person-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path fill="currentColor" d="M12 12c2.761 0 5-2.239 5-5s-2.239-5-5-5-5 2.239-5 5 2.239 5 5 5Zm0 2c-4.418 0-8 2.239-8 5v1h16v-1c0-2.761-3.582-5-8-5Z"/>
+          </svg>
+        </div>
+        <div>
+          <div id="startMenuUser" style="font-size:16px;font-weight:400">Martin</div>
+          <div style="font-size:12px;opacity:.8">Local account</div>
+        </div>
+      </div>
+      <div class="start-grid">
+        <div class="app-tile">
+          <svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/></svg>
+          Files
+        </div>
+        <div class="app-tile" id="openBrowserTile">
+          <svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 1 0 7 7h-2a5 5 0 1 1-5-5V2Zm-1 12h2v8h-2z"/></svg>
+          Browser
+        </div>
+        <div class="app-tile">
+          <svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9h-2a7 7 0 1 1-7-7V3Zm0 4 5 3-5 3-5-3 5-3Z"/></svg>
+          Settings
+        </div>
+      </div>
+      <div class="start-footer">
+        <button id="signOutBtn" type="button">Sign out</button>
+        <button id="powerBtn" type="button">Power</button>
+      </div>
+    </div>
+
+    <div class="taskbar">
+      <div class="start-pill" id="startButton">
+        <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path fill="white" d="M3 3h8v8H3V3Zm10 0h8v8h-8V3ZM3 13h8v8H3v-8Zm10 0h8v8h-8v-8Z"/></svg>
+        Start
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const state = { firstRun: true, username: 'Martin', password: '', avatarData: '' };
+
+    const boot = document.getElementById('boot');
+    const lock = document.getElementById('lock');
+    const lockBlur = document.getElementById('lockBlur');
+    const lockCenter = document.getElementById('lockCenter');
+    const lockAvatar = document.getElementById('lockAvatar');
+    const lockAvatarImg = document.getElementById('lockAvatarImg');
+    const lockUser = document.getElementById('lockUser');
+    const timeText = document.getElementById('timeText');
+    const dateText = document.getElementById('dateText');
+    const signupPanel = document.getElementById('signupPanel');
+    const loginPanel = document.getElementById('loginPanel');
+    const welcome = document.getElementById('welcome');
+    const welcomeText = document.getElementById('welcomeText');
+    const desktop = document.getElementById('desktop');
+    const desktopName = document.getElementById('desktopName');
+    const signupMsg = document.getElementById('signupMsg');
+    const loginMsg = document.getElementById('loginMsg');
+    const signupUser = document.getElementById('signupUser');
+    const signupPass = document.getElementById('signupPass');
+    const signupConfirm = document.getElementById('signupConfirm');
+    const loginPass = document.getElementById('loginPass');
+    const changePfpBtn = document.getElementById('changePfpBtn');
+    const pfpInput = document.getElementById('pfpInput');
+    const signupPfpImg = document.getElementById('signupPfpImg');
+    const loginPfpImg = document.getElementById('loginPfpImg');
+    const startMenu = document.getElementById('startMenu');
+    const startButton = document.getElementById('startButton');
+    const startMenuAvatarImg = document.getElementById('startMenuAvatarImg');
+    const startMenuUser = document.getElementById('startMenuUser');
+    const signOutBtn = document.getElementById('signOutBtn');
+    const powerBtn = document.getElementById('powerBtn');
+    const signupPfpWrap = document.getElementById('signupPfpWrap');
+    const loginPfpWrap = document.querySelector('#loginPanel .pfp-wrap');
+
+    // Proxy Components Handles
+    const openBrowserTile = document.getElementById('openBrowserTile');
+    const browserWindow = document.getElementById('browserWindow');
+    const closeBrowserBtn = document.getElementById('closeBrowserBtn');
+    const browserUrlInput = document.getElementById('browserUrlInput');
+    const browserIframe = document.getElementById('browserIframe');
+
+    let currentStep = 'lock';
+    let busy = false;
+
+    function pad(n){ return String(n).padStart(2, '0'); }
+    function refreshClock(){
+      const d = new Date();
+      const hours = d.getHours() % 12 || 12;
+      const mins = pad(d.getMinutes());
+      timeText.textContent = `${hours}:${mins}`;
+      dateText.textContent = d.toLocaleDateString(undefined, { weekday:'long', month:'long', day:'numeric' });
+    }
+    refreshClock();
+    setInterval(refreshClock, 1000);
+
+    function setAvatar(imgData){
+      state.avatarData = imgData || '';
+      const show = !!state.avatarData;
+      [signupPfpImg, loginPfpImg, lockAvatarImg, startMenuAvatarImg].forEach(img => {
+        img.src = state.avatarData || '';
+        img.style.display = show ? 'block' : 'none';
+      });
+      [signupPfpWrap, loginPfpWrap].forEach(w => {
+        const icon = w.querySelector('.person-icon');
+        if (icon) icon.style.display = show ? 'none' : 'block';
+      });
+      const lockIcon = lockAvatar.querySelector('.person-icon');
+      if (lockIcon) lockIcon.style.display = show ? 'none' : 'block';
+    }
+
+    function hideAllPanels(){ signupPanel.classList.remove('show'); loginPanel.classList.remove('show'); }
+    function closeStartMenu(){ startMenu.classList.remove('show'); startMenu.setAttribute('aria-hidden', 'true'); }
+
+    function toggleStartMenu(){
+      if (startMenu.classList.contains('show')) closeStartMenu();
+      else {
+        startMenu.classList.add('show');
+        startMenu.setAttribute('aria-hidden', 'false');
+        startMenuUser.textContent = state.username || 'Martin';
+      }
+    }
+
+    function openSignup(){
+      currentStep = 'signup'; hideAllPanels(); closeStartMenu();
+      signupMsg.textContent = '';
+      signupUser.value = state.username === 'Martin' ? '' : state.username;
+      setTimeout(() => signupPanel.classList.add('show'), 40);
+    }
+
+    function openLogin(){
+      currentStep = 'login'; hideAllPanels(); closeStartMenu();
+      loginMsg.textContent = ''; loginPass.value = '';
+      document.getElementById('loginUserTitle').textContent = state.username || 'Martin';
+      lockUser.textContent = state.username || 'Martin';
+      desktopName.textContent = `Welcome, ${state.username || 'Martin'}`;
+      setTimeout(() => loginPanel.classList.add('show'), 40);
+    }
+
+    function blurLock(on){
+      if (on) {
+        lockBlur.classList.add('blurred');
+        lockCenter.style.opacity = '0';
+        lockCenter.style.transform = 'translateY(-22px)';
+      } else {
+        lockBlur.classList.remove('blurred');
+        lockCenter.style.opacity = '1';
+        lockCenter.style.transform = 'translateY(0)';
+      }
+    }
+
+    function showWelcomeThenDesktop(){
+      currentStep = 'welcome'; hideAllPanels(); closeStartMenu();
+      welcome.classList.add('active');
+      setTimeout(() => {
+        welcome.classList.remove('active');
+        desktop.classList.add('show');
+        lock.classList.remove('active');
+        currentStep = 'desktop';
+        busy = false;
+      }, 2600);
+    }
+
+    lock.addEventListener('click', (e) => {
+      if (e.target.closest('.panel')) return;
+      if (currentStep === 'lock') {
+        busy = true; blurLock(true);
+        setTimeout(() => { if (state.firstRun) openSignup(); else openLogin(); busy = false; }, 320);
+      }
+    });
+
+    changePfpBtn.addEventListener('click', () => pfpInput.click());
+    pfpInput.addEventListener('change', () => {
+      const file = pfpInput.files && pfpInput.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => setAvatar(reader.result);
+      reader.readAsDataURL(file);
+    });
+
+    document.getElementById('skipSetupBtn').addEventListener('click', () => {
+      state.username = signupUser.value.trim() || 'Martin';
+      state.password = '1234'; state.firstRun = false; openLogin();
+    });
+
+    document.getElementById('createAccountBtn').addEventListener('click', () => {
+      if (!signupUser.value.trim()) { signupMsg.textContent = 'Enter a username.'; return; }
+      state.username = signupUser.value.trim();
+      state.password = signupPass.value; state.firstRun = false; openLogin();
+    });
+
+    document.getElementById('backBtn').addEventListener('click', () => openSignup());
+    document.getElementById('loginBtn').addEventListener('click', () => {
+      if (loginPass.value !== state.password && state.password !== '1234') { loginMsg.textContent = 'Incorrect password.'; return; }
+      showWelcomeThenDesktop();
+    });
+
+    loginPass.addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('loginBtn').click(); });
+
+    startButton.addEventListener('click', (e) => { e.stopPropagation(); toggleStartMenu(); });
+
+    // Proxy Interface Handlers
+    openBrowserTile.addEventListener('click', () => {
+      closeStartMenu();
+      browserWindow.classList.add('active');
+    });
+
+    closeBrowserBtn.addEventListener('click', () => {
+      browserWindow.classList.remove('active');
+      browserIframe.src = 'about:blank';
+      browserUrlInput.value = '';
+    });
+
+    browserUrlInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        let url = browserUrlInput.value.trim();
+        if (!/^https?:\/\//i.test(url)) {
+          url = 'https://' + url;
+        }
+        browserIframe.src = `/proxy?url=${encodeURIComponent(url)}`;
+      }
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!desktop.classList.contains('show')) return;
+      if (e.target.closest('#startMenu') || e.target.closest('#startButton')) return;
+      closeStartMenu();
+    });
+
+    setTimeout(() => {
+      boot.classList.add('fade-out');
+      setTimeout(() => {
+        boot.classList.remove('active'); boot.style.display = 'none';
+        lock.classList.add('active'); currentStep = 'lock'; blurLock(false);
+      }, 900);
+    }, 2000);
+  </script>
+</body>
+</html>
