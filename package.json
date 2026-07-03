@@ -1,0 +1,14 @@
+{
+  "name": "windows-proxy-os",
+  "version": "1.0.0",
+  "description": "Windows-inspired web proxy",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "node-libcurl": "^3.0.0",
+    "scramjet": "^4.36.1"
+  }
+}
